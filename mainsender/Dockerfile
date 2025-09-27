@@ -1,15 +1,25 @@
-# Tomcat 10.x aur Java 17 (jo aapke pom.xml mein hai) ka base image use kar rahe hain.
-# 'temurin' image lightweight aur secure hota hai.
+# --- STAGE 1: BUILD PHASE ---
+FROM maven:3.8.7-jdk-17 AS builder
+
+# Working directory set karein.
+WORKDIR /app/mainsender
+
+# Dependencies download karein.
+# Yeh step humesha run nahi hoga agar pom.xml same rahe.
+COPY mainsender/pom.xml .
+RUN mvn dependency:go-offline
+
+# Source code copy karein aur WAR file banayein.
+COPY mainsender/src src
+RUN mvn clean install -DskipTests
+
+# --- STAGE 2: RUNTIME PHASE ---
+# Tomcat 10.x aur Java 17 ka final image use karein.
 FROM tomcat:10-jre17-temurin-focal
 
-# Yeh step zaroori hai Render ko yeh batane ke liye ki WAR file kahan se milegi
-# aur use kahan daalna hai.
-#
-# 1. 'target/mainsender.war' se file utha raha hai (jo Maven banayega).
-# 2. Use Tomcat ke 'webapps' folder mein 'ROOT.war' naam se daal raha hai.
-#    'ROOT.war' daalne se aapki application seedhe URL par chalegi, jaise:
-#    https://[aapka-app-naam].onrender.com/ (bina /mainsender ke).
-COPY target/mainsender.war /usr/local/tomcat/webapps/ROOT.war
+# Build stage se final WAR file ko copy karein.
+# Kyunki humne 'mainsender' ko working directory set kiya tha, war file yahan milegi.
+COPY --from=builder /app/mainsender/target/mainsender.war /usr/local/tomcat/webapps/ROOT.war
 
-# Tomcat image mein default ENTRYPOINT hota hai jo server ko start kar deta hai.
-# Isliye aapko koi alag 'CMD' ki zaroorat nahi hai.
+# Port expose karna zaroori hai (Render ise khud hi detect kar leta hai, but good practice)
+EXPOSE 8080
